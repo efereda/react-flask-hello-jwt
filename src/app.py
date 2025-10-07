@@ -1,17 +1,18 @@
-"""
-This module takes care of starting the API Server, Loading the DB and Adding the endpoints
-"""
+from api.routes import api, bcrypt
 import os
 from flask import Flask, request, jsonify, url_for, send_from_directory
 from flask_migrate import Migrate
+from flask_bcrypt import Bcrypt
 from flask_swagger import swagger
+
 from api.utils import APIException, generate_sitemap
 from api.models import db
-from api.routes import api
+
+
 from api.admin import setup_admin
 from api.commands import setup_commands
-
-# from models import Person
+from flask_jwt_extended import JWTManager
+from flask_cors import CORS
 
 ENV = "development" if os.getenv("FLASK_DEBUG") == "1" else "production"
 static_file_dir = os.path.join(os.path.dirname(
@@ -19,7 +20,10 @@ static_file_dir = os.path.join(os.path.dirname(
 app = Flask(__name__)
 app.url_map.strict_slashes = False
 
-# database condiguration
+# Permite CORS
+CORS(app, origins="*")
+
+# Configuración de la base de datos
 db_url = os.getenv("DATABASE_URL")
 if db_url is not None:
     app.config['SQLALCHEMY_DATABASE_URI'] = db_url.replace(
@@ -31,13 +35,23 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 MIGRATE = Migrate(app, db, compare_type=True)
 db.init_app(app)
 
-# add the admin
-setup_admin(app)
 
-# add the admin
+bcrypt.init_app(app)
+
+app.config["JWT_SECRET_KEY"] = "clave-de-prueba-simple-sin-caracteres-raros"
+app.config["JWT_CSRF_PROTECTION"] = False
+app.config["UPLOAD_FOLDER"] = "src/front/assets/img/ProfilePictures"
+
+UPLOAD_FOLDER = 'src/front/assets/img/ProfilePictures'
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+
+jwt = JWTManager(app)
+
+# Setup admin y commands
+setup_admin(app)
 setup_commands(app)
 
-# Add all endpoints form the API with a "api" prefix
+# Registra el blueprint de la API
 app.register_blueprint(api, url_prefix='/api')
 
 # Handle/serialize errors like a JSON object
@@ -57,6 +71,8 @@ def sitemap():
     return send_from_directory(static_file_dir, 'index.html')
 
 # any other endpoint will try to serve it like a static file
+
+
 @app.route('/<path:path>', methods=['GET'])
 def serve_any_other_file(path):
     if not os.path.isfile(os.path.join(static_file_dir, path)):
